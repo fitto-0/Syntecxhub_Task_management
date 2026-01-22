@@ -10,9 +10,32 @@ const taskSchema = new mongoose.Schema(
       enum: ["pending", "in-progress", "done"],
       default: "pending"
     },
-    dueDate: { type: Date }
+    dueDate: { type: Date },
+    priority: {
+      type: String,
+      enum: ["low", "medium", "high"],
+      default: "medium"
+    },
+    isFavorite: {
+      type: Boolean,
+      default: false
+    },
+    completedAt: {
+      type: Date
+    }
   },
   { timestamps: true }
 );
+
+// Automatically set completedAt when status becomes "done"
+taskSchema.pre("save", function setCompletedAt(next) {
+  if (this.isModified("status") && this.status === "done" && !this.completedAt) {
+    this.completedAt = new Date();
+  }
+  if (this.isModified("status") && this.status !== "done") {
+    this.completedAt = undefined;
+  }
+  next();
+});
 
 export default mongoose.model("Task", taskSchema);
