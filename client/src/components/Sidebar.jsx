@@ -2,15 +2,23 @@ import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { 
   FiLayout, 
-  FiUser, 
+  FiCalendar,
+  FiCheckSquare,
+  FiBarChart2,
+  FiFileText,
+  FiSettings,
   FiMenu,
-  FiX 
+  FiX,
+  FiPlus
 } from "react-icons/fi";
 import { useState } from "react";
 
-const menuItems = [
+const mainNavItems = [
   { path: "/", label: "Dashboard", icon: FiLayout },
-  { path: "/profile", label: "Profile", icon: FiUser }
+  { path: "/calendar", label: "Calendar", icon: FiCalendar },
+  { path: "/tasks", label: "My Tasks", icon: FiCheckSquare },
+  { path: "/statistics", label: "Statistics", icon: FiBarChart2 },
+  { path: "/documents", label: "Documents", icon: FiFileText }
 ];
 
 export default function Sidebar() {
@@ -29,49 +37,47 @@ export default function Sidebar() {
       </button>
       <aside className={`sidebar ${isMobileOpen ? "open" : ""}`}>
         <div className="sidebar-header">
-          <div className="logo">
+          <Link to="/" className="logo" onClick={() => setIsMobileOpen(false)}>
             <div className="logo-icon-wrapper">
-              <FiLayout className="logo-icon" />
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
             </div>
             <span className="logo-text">Prolista</span>
-          </div>
+          </Link>
         </div>
 
         <nav className="sidebar-nav">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`nav-item ${location.pathname === item.path ? "active" : ""}`}
-                onClick={() => setIsMobileOpen(false)}
-              >
-                <Icon className="nav-icon" />
-                <span className="nav-label">{item.label}</span>
-              </Link>
-            );
-          })}
+          <div className="nav-section">
+            {mainNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.path;
+              return (
+                <Link
+                  key={item.label}
+                  to={item.path}
+                  className={`nav-item ${isActive ? "active" : ""}`}
+                  onClick={() => setIsMobileOpen(false)}
+                >
+                  <Icon className="nav-icon" />
+                  <span className="nav-label">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
         </nav>
 
         <div className="sidebar-footer">
-          <div className="user-profile">
-            {user?.profilePicture ? (
-              <img
-                src={user.profilePicture}
-                alt={user.name}
-                className="profile-avatar"
-              />
-            ) : (
-              <div className="profile-avatar-placeholder">
-                {user?.name?.charAt(0)?.toUpperCase() || "U"}
-              </div>
-            )}
-            <div className="user-info">
-              <div className="user-name">{user?.name || "User"}</div>
-              <div className="user-email">{user?.email || ""}</div>
-            </div>
-          </div>
+          <Link
+            to="/profile"
+            className="nav-item nav-item-settings"
+            onClick={() => setIsMobileOpen(false)}
+          >
+            <FiSettings className="nav-icon" />
+            <span className="nav-label">Settings</span>
+          </Link>
         </div>
       </aside>
       {isMobileOpen && (

@@ -6,12 +6,18 @@ const THEME_KEY = "tm_theme";
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(
-    () => localStorage.getItem(THEME_KEY) || "dark"
+    () => {
+      const saved = localStorage.getItem(THEME_KEY);
+      return saved || "light";
+    }
   );
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    const root = document.documentElement;
+    root.setAttribute('data-theme', theme);
     localStorage.setItem(THEME_KEY, theme);
+    // Force re-render by updating body class
+    document.body.setAttribute('data-theme', theme);
   }, [theme]);
 
   const toggleTheme = () => {
