@@ -29,7 +29,7 @@ export default function Sidebar() {
   return (
     <>
       <button 
-        className="mobile-menu-toggle"
+        className={`mobile-menu-toggle ${isMobileOpen ? 'sidebar-open' : ''}`}
         onClick={() => setIsMobileOpen(!isMobileOpen)}
         aria-label="Toggle menu"
       >

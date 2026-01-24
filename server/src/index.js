@@ -4,6 +4,8 @@ import dotenv from "dotenv";
 import connectDb from "./config/db.js";
 import authRoutes from "./routes/auth.js";
 import taskRoutes from "./routes/tasks.js";
+import projectRoutes from "./routes/projects.js";
+import monthGoalRoutes from "./routes/monthGoals.js";
 
 dotenv.config();
 
@@ -19,6 +21,8 @@ app.get("/", (_req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/tasks", taskRoutes);
+app.use("/api/projects", projectRoutes);
+app.use("/api/month-goals", monthGoalRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

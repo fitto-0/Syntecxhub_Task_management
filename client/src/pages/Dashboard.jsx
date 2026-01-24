@@ -16,6 +16,7 @@ import {
   FiCalendar,
   FiZap,
   FiCheckCircle,
+  FiCheckSquare,
   FiFileText,
   FiAlertCircle,
   FiGift,
@@ -39,6 +40,7 @@ const priorityOptions = [
 export default function Dashboard() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -49,12 +51,7 @@ export default function Dashboard() {
   const [widgetMenuOpen, setWidgetMenuOpen] = useState(null);
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [newGoalText, setNewGoalText] = useState("");
-  const [monthGoals, setMonthGoals] = useState([
-    { id: 1, text: "Read 2 books", completed: true },
-    { id: 2, text: "Sports every day", completed: false },
-    { id: 3, text: "Complete the course", completed: false },
-    { id: 4, text: "Bend down with a parachute", completed: false }
-  ]);
+  const [monthGoals, setMonthGoals] = useState([]);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -65,11 +62,31 @@ export default function Dashboard() {
 
   useEffect(() => {
     let mounted = true;
+    // Load tasks
     api
       .get("/tasks")
       .then((res) => mounted && setTasks(res.data))
-      .catch(() => mounted && setError("Unable to load tasks"))
+      .catch(() => mounted && setError("Unable to load tasks"));
+    
+    // Load projects from backend
+    api
+      .get("/projects")
+      .then((res) => mounted && setProjects(res.data || []))
+      .catch((err) => {
+        console.error("Failed to load projects:", err);
+        if (mounted) setError("Unable to load projects");
+      });
+    
+    // Load month goals from backend
+    api
+      .get("/month-goals")
+      .then((res) => mounted && setMonthGoals(res.data || []))
+      .catch((err) => {
+        console.error("Failed to load month goals:", err);
+        if (mounted) setError("Unable to load month goals");
+      })
       .finally(() => mounted && setLoading(false));
+    
     return () => {
       mounted = false;
     };
@@ -278,13 +295,38 @@ export default function Dashboard() {
     const inProgress = tasks.filter((t) => t.status === "in-progress").length;
     const pending = tasks.filter((t) => t.status === "pending").length;
     const completion = total ? Math.round((done / total) * 100) : 0;
-    const projectsStopped = 2; // Mock data
-    return { total, done, inProgress, pending, completion, projectsStopped };
-  }, [tasks]);
+    
+    // Project statistics
+    const totalProjects = projects.length;
+    const activeProjects = projects.filter((p) => p.status === "in-progress").length;
+    const completedProjects = projects.filter((p) => p.status === "done").length;
+    const stoppedProjects = projects.filter((p) => p.status === "stopped").length;
+    const pendingProjects = projects.filter((p) => p.status === "pending").length;
+    const projectCompletionRate = totalProjects ? Math.round((completedProjects / totalProjects) * 100) : 0;
+    
+    return { 
+      total, 
+      done, 
+      inProgress, 
+      pending, 
+      completion, 
+      projectsStopped: stoppedProjects,
+      // Project analytics
+      totalProjects,
+      activeProjects,
+      completedProjects,
+      pendingProjects,
+      projectCompletionRate
+    };
+  }, [tasks, projects]);
 
   const inProgressTasks = useMemo(() => {
     return tasks.filter((t) => t.status === "in-progress").slice(0, 3);
   }, [tasks]);
+
+  const allProjects = useMemo(() => {
+    return projects.slice(0, 6); // Show up to 6 projects
+  }, [projects]);
 
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
@@ -293,38 +335,79 @@ export default function Dashboard() {
     e.preventDefault();
     setError("");
     try {
-      const res = await api.post("/tasks", form);
-      setTasks((prev) => [res.data, ...prev]);
+      if (form.isProject) {
+        // Create project
+        const projectData = {
+          title: form.title,
+          description: form.description,
+          status: form.status,
+          priority: form.priority,
+          dueDate: form.dueDate,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        
+        const res = await api.post("/projects", projectData);
+        setProjects((prev) => [res.data, ...prev]);
+      } else {
+        // Create task
+        const res = await api.post("/tasks", form);
+        setTasks((prev) => [res.data, ...prev]);
+      }
       setForm({
         title: "",
         description: "",
         status: "in-progress",
         dueDate: "",
-        priority: "medium"
+        priority: "medium",
+        isProject: false
       });
       setShowCreateForm(false);
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to create task");
+      setError(err.response?.data?.message || `Failed to create ${form.isProject ? 'project' : 'task'}`);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this task?")) {
+  const handleDelete = async (id, isProject = false) => {
+    if (window.confirm(`Are you sure you want to delete this ${isProject ? 'project' : 'task'}?`)) {
       try {
-        await api.delete(`/tasks/${id}`);
-        setTasks((prev) => prev.filter((t) => t._id !== id));
+        if (isProject) {
+          await api.delete(`/projects/${id}`);
+          setProjects((prev) => prev.filter((p) => p._id !== id));
+        } else {
+          await api.delete(`/tasks/${id}`);
+          setTasks((prev) => prev.filter((t) => t._id !== id));
+        }
       } catch (err) {
         setError(err.response?.data?.message || "Delete failed");
       }
     }
   };
 
+  const handleStopProject = async (projectId) => {
+    try {
+      await api.put(`/projects/${projectId}`, { status: 'stopped' });
+      setProjects(prev => prev.map(p => 
+        p._id === projectId ? { ...p, status: 'stopped', updatedAt: new Date().toISOString() } : p
+      ));
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to stop project");
+    }
+  };
+
   const handleRefresh = () => {
     setLoading(true);
-    api
-      .get("/tasks")
-      .then((res) => setTasks(res.data))
-      .catch(() => setError("Unable to load tasks"))
+    Promise.all([
+      api.get("/tasks"),
+      api.get("/projects"),
+      api.get("/month-goals")
+    ])
+      .then(([tasksRes, projectsRes, goalsRes]) => {
+        setTasks(tasksRes.data);
+        setProjects(projectsRes.data || []);
+        setMonthGoals(goalsRes.data || []);
+      })
+      .catch(() => setError("Unable to load data"))
       .finally(() => setLoading(false));
   };
 
@@ -486,11 +569,17 @@ ${tasks.filter(t => t.priority === 'high' && t.status !== 'done').length > 0 ? `
   const handleTaskTypeSelect = (type) => {
     setShowTaskTypeModal(false);
     if (type === 'task') {
+      setForm({
+        title: '',
+        description: '',
+        status: 'in-progress',
+        dueDate: '',
+        priority: 'medium',
+        isProject: false
+      });
       setShowCreateForm(true);
     } else if (type === 'project') {
-      // Handle project creation
       setForm({
-        ...form,
         title: '',
         description: '',
         status: 'in-progress',
@@ -506,27 +595,58 @@ ${tasks.filter(t => t.priority === 'high' && t.status !== 'done').length > 0 ? `
     setShowGoalModal(true);
   };
 
-  const handleSubmitGoal = (e) => {
+  const handleSubmitGoal = async (e) => {
     e.preventDefault();
     if (newGoalText.trim()) {
-      setMonthGoals(prev => [...prev, {
-        id: Date.now(),
-        text: newGoalText.trim(),
-        completed: false
-      }]);
-      setNewGoalText("");
-      setShowGoalModal(false);
+      try {
+        const res = await api.post("/month-goals", {
+          title: newGoalText.trim()
+        });
+        setMonthGoals(prev => [...prev, res.data]);
+        setNewGoalText("");
+        setShowGoalModal(false);
+      } catch (err) {
+        setError(err.response?.data?.message || "Failed to add goal");
+      }
     }
   };
 
-  const handleDeleteGoal = (id) => {
-    setMonthGoals(prev => prev.filter(g => g.id !== id));
+  const handleDeleteGoal = async (id) => {
+    try {
+      await api.delete(`/month-goals/${id}`);
+      setMonthGoals(prev => prev.filter(g => g._id !== id));
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to delete goal");
+    }
   };
 
-  const toggleGoal = (id) => {
-    setMonthGoals(prev => prev.map(goal => 
-      goal.id === id ? { ...goal, completed: !goal.completed } : goal
-    ));
+  const toggleGoal = async (id) => {
+    try {
+      const goal = monthGoals.find(g => g._id === id);
+      if (goal) {
+        const res = await api.put(`/month-goals/${id}`, {
+          completed: !goal.completed
+        });
+        setMonthGoals(prev => prev.map(g => 
+          g._id === id ? { ...g, completed: !g.completed } : g
+        ));
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to update goal");
+    }
+  };
+
+  const updateGoalText = async (id, newText) => {
+    try {
+      const res = await api.put(`/month-goals/${id}`, {
+        title: newText
+      });
+      setMonthGoals(prev => prev.map(g => 
+        g._id === id ? { ...g, title: newText } : g
+      ));
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to update goal");
+    }
   };
 
   const getTaskIcon = (task) => {
@@ -534,6 +654,36 @@ ${tasks.filter(t => t.priority === 'high' && t.status !== 'done').length > 0 ? `
     if (task.status === "done") return <FiCheckCircle className="task-icon" />;
     if (task.status === "in-progress") return <FiZap className="task-icon" />;
     return <FiGift className="task-icon" />;
+  };
+
+  const getProjectIcon = (project) => {
+    switch (project.status) {
+      case "in-progress":
+        return <FiZap className="project-status-icon" />;
+      case "done":
+        return <FiCheckCircle className="project-status-icon" />;
+      case "stopped":
+        return <FiAlertCircle className="project-status-icon" />;
+      case "pending":
+        return <FiGift className="project-status-icon" />;
+      default:
+        return <FiFileText className="project-status-icon" />;
+    }
+  };
+
+  const getProjectStatusColor = (status) => {
+    switch (status) {
+      case "in-progress":
+        return "#3b82f6";
+      case "done":
+        return "#10b981";
+      case "stopped":
+        return "#ef4444";
+      case "pending":
+        return "#f59e0b";
+      default:
+        return "#6b7280";
+    }
   };
 
   const formatDate = (dateString) => {
@@ -724,22 +874,30 @@ ${tasks.filter(t => t.priority === 'high' && t.status !== 'done').length > 0 ? `
                     <span className="stat-big-label">Tasks done for all time</span>
                   </div>
                   <div className="overall-stat-large">
+                    <span className="stat-big-number">{stats.totalProjects}</span>
+                    <span className="stat-big-label">Total Projects</span>
+                  </div>
+                  <div className="overall-stat-large">
                     <span className="stat-big-number">{stats.projectsStopped}</span>
-                    <span className="stat-big-label">projects are stopped</span>
+                    <span className="stat-big-label">Projects Stopped</span>
                   </div>
                 </div>
                 <div className="overall-circles">
                   <div className="overall-circle">
-                    <span className="circle-number">{stats.total}</span>
+                    <span className="circle-number">{stats.totalProjects}</span>
                     <span className="circle-label">Projects</span>
                   </div>
                   <div className="overall-circle">
-                    <span className="circle-number">{stats.inProgress}</span>
-                    <span className="circle-label">In Progress</span>
+                    <span className="circle-number">{stats.activeProjects}</span>
+                    <span className="circle-label">Active</span>
                   </div>
                   <div className="overall-circle">
-                    <span className="circle-number">{stats.done}</span>
+                    <span className="circle-number">{stats.completedProjects}</span>
                     <span className="circle-label">Completed</span>
+                  </div>
+                  <div className="overall-circle">
+                    <span className="circle-number">{stats.projectCompletionRate}%</span>
+                    <span className="circle-label">Success Rate</span>
                   </div>
                 </div>
               </div>
@@ -882,7 +1040,7 @@ ${tasks.filter(t => t.priority === 'high' && t.status !== 'done').length > 0 ? `
                     {weeklyProgress.weekData.map((day, index) => {
                       const maxValue = Math.max(...weeklyProgress.weekData.map(d => Math.max(d.completed, d.created)));
                       const topPosition = maxValue > 0 ? (100 - (day.highPriority / maxValue) * 80) : 90;
-                      
+
                       return (
                         <div 
                           key={`priority-${index}`}
@@ -1040,6 +1198,103 @@ ${tasks.filter(t => t.priority === 'high' && t.status !== 'done').length > 0 ? `
               </div>
             </div>
 
+            {/* Projects Analytics */}
+            <div className="widget projects-analytics-widget">
+              <div className="widget-header">
+                <h2>Projects Analytics</h2>
+                <div className="widget-menu-wrapper">
+                  <button 
+                    className="icon-btn-small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setWidgetMenuOpen(widgetMenuOpen === 'projects' ? null : 'projects');
+                    }}
+                    aria-label="More options"
+                  >
+                    <FiMoreVertical />
+                  </button>
+                  {widgetMenuOpen === 'projects' && (
+                    <div className="widget-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setWidgetMenuOpen(null);
+                          handleRefresh();
+                        }}
+                      >
+                        <FiRefreshCw /> Refresh
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setWidgetMenuOpen(null);
+                          console.log("Export projects data");
+                        }}
+                      >
+                        <FiDownload /> Export Projects
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="widget-body">
+                <div className="projects-summary">
+                  <div className="project-stat-item">
+                    <div className="project-stat-icon active">
+                      <FiZap />
+                    </div>
+                    <div className="project-stat-content">
+                      <span className="project-stat-number">{stats.activeProjects}</span>
+                      <span className="project-stat-label">Active Projects</span>
+                    </div>
+                  </div>
+                  <div className="project-stat-item">
+                    <div className="project-stat-icon completed">
+                      <FiCheckCircle />
+                    </div>
+                    <div className="project-stat-content">
+                      <span className="project-stat-number">{stats.completedProjects}</span>
+                      <span className="project-stat-label">Completed</span>
+                    </div>
+                  </div>
+                  <div className="project-stat-item">
+                    <div className="project-stat-icon stopped">
+                      <FiAlertCircle />
+                    </div>
+                    <div className="project-stat-content">
+                      <span className="project-stat-number">{stats.projectsStopped}</span>
+                      <span className="project-stat-label">Stopped</span>
+                    </div>
+                  </div>
+                  <div className="project-stat-item">
+                    <div className="project-stat-icon pending">
+                      <FiGift />
+                    </div>
+                    <div className="project-stat-content">
+                      <span className="project-stat-number">{stats.pendingProjects}</span>
+                      <span className="project-stat-label">Pending</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="project-progress-bar">
+                  <div className="progress-label">
+                    <span>Project Completion Rate</span>
+                    <span className="progress-percentage">{stats.projectCompletionRate}%</span>
+                  </div>
+                  <div className="progress-bar-container">
+                    <div 
+                      className="progress-bar-fill"
+                      style={{ width: `${stats.projectCompletionRate}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Month Goals */}
             <div className="widget month-goals-widget">
               <div className="widget-header">
@@ -1066,38 +1321,36 @@ ${tasks.filter(t => t.priority === 'high' && t.status !== 'done').length > 0 ? `
               <div className="widget-body">
                 <div className="goals-list">
                   {monthGoals.map((goal) => (
-                    <div key={goal.id} className="goal-item">
+                    <div key={goal._id} className="goal-item">
                       <label className="goal-label">
                         <input
                           type="checkbox"
                           checked={goal.completed}
-                          onChange={() => toggleGoal(goal.id)}
+                          onChange={() => toggleGoal(goal._id)}
                           className="goal-checkbox"
                         />
                         <span className={goal.completed ? "goal-text completed" : "goal-text"}>
                           {editingGoal ? (
                             <input
                               type="text"
-                              defaultValue={goal.text}
+                              defaultValue={goal.title}
                               onBlur={(e) => {
-                                if (e.target.value.trim()) {
-                                  setMonthGoals(prev => prev.map(g => 
-                                    g.id === goal.id ? { ...g, text: e.target.value.trim() } : g
-                                  ));
+                                if (e.target.value.trim() && e.target.value !== goal.title) {
+                                  updateGoalText(goal._id, e.target.value.trim());
                                 }
                               }}
                               className="goal-edit-input"
                               autoFocus
                             />
                           ) : (
-                            goal.text
+                            goal.title
                           )}
                         </span>
                       </label>
                       {editingGoal && (
                         <button
                           className="goal-delete-btn"
-                          onClick={() => handleDeleteGoal(goal.id)}
+                          onClick={() => handleDeleteGoal(goal._id)}
                           aria-label="Delete goal"
                         >
                           <FiTrash2 />
@@ -1193,6 +1446,129 @@ ${tasks.filter(t => t.priority === 'high' && t.status !== 'done').length > 0 ? `
               </div>
             </div>
 
+            {/* Projects */}
+            <div className="widget projects-widget">
+              <div className="widget-header">
+                <h2>My Projects ({allProjects.length})</h2>
+                <button
+                  type="button"
+                  className="small"
+                  onClick={() => {
+                    const completedProjects = projects.filter(p => p.status === "done");
+                    console.log("Completed Projects:", completedProjects);
+                    alert(`You have ${completedProjects.length} completed projects`);
+                  }}
+                >
+                  View Completed <FiChevronRight />
+                </button>
+              </div>
+              <div className="widget-body">
+                <div className="project-cards-grid">
+                  {allProjects.map((project) => (
+                    <div key={project._id} className="project-card">
+                      <div className="project-card-header">
+                        <div className="project-card-icon" style={{ color: getProjectStatusColor(project.status) }}>
+                          {getProjectIcon(project)}
+                        </div>
+                        <div className="project-card-status" style={{ backgroundColor: getProjectStatusColor(project.status) + '20', color: getProjectStatusColor(project.status) }}>
+                          {project.status.replace('-', ' ').toUpperCase()}
+                        </div>
+                      </div>
+                      <div className="project-card-content">
+                        <div className="project-card-title">{project.title}</div>
+                        <div className="project-card-description">{project.description}</div>
+                        <div className="project-card-meta">
+                          <div className="project-card-priority">
+                            <span className={`priority-badge priority-${project.priority}`}>
+                              {project.priority.toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="project-card-date">
+                            <FiCalendar />
+                            {formatDate(project.dueDate)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="project-card-actions">
+                        <button 
+                          className="project-card-bell" 
+                          aria-label="Set notification"
+                          onClick={() => {
+                            alert(`Notification set for: ${project.title}`);
+                          }}
+                          title="Set notification"
+                        >
+                          <FiBell />
+                        </button>
+                        {project.status === 'in-progress' && (
+                          <button 
+                            className="project-card-stop" 
+                            aria-label="Stop project"
+                            onClick={() => handleStopProject(project._id)}
+                            title="Stop project"
+                          >
+                            <FiAlertCircle />
+                          </button>
+                        )}
+                        <div className="project-card-menu-wrapper">
+                          <button 
+                            className="project-card-menu" 
+                            aria-label="More options"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setTaskMenuOpen(taskMenuOpen === project._id ? null : project._id);
+                            }}
+                          >
+                            <FiMoreVertical />
+                          </button>
+                          {taskMenuOpen === project._id && (
+                            <div className="task-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                              <button onClick={() => {
+                                setTaskMenuOpen(null);
+                                console.log("Pin project:", project.title);
+                              }}>
+                                Pin Project
+                              </button>
+                              <button onClick={() => {
+                                setTaskMenuOpen(null);
+                                console.log("Edit project:", project.title);
+                                // You can add edit modal here
+                              }}>
+                                Edit
+                              </button>
+                              <button onClick={() => {
+                                setTaskMenuOpen(null);
+                                handleDelete(project._id, true);
+                              }}>
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    className="add-project-card"
+                    onClick={() => {
+                      setForm({
+                        title: '',
+                        description: '',
+                        status: 'in-progress',
+                        dueDate: '',
+                        priority: 'high',
+                        isProject: true
+                      });
+                      setShowCreateForm(true);
+                    }}
+                  >
+                    <FiPlus className="add-icon-large" />
+                    <span>Add Project</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -1256,7 +1632,7 @@ ${tasks.filter(t => t.priority === 'high' && t.status !== 'done').length > 0 ? `
                   <FiX />
                 </button>
               </div>
-              <form onSubmit={handleSubmit} className="modal-form">
+              <form onSubmit={handleAdd} className="modal-form">
                 <div className="form-group">
                   <label>
                     {form.isProject ? 'Project' : 'Task'} Title
@@ -1291,6 +1667,7 @@ ${tasks.filter(t => t.priority === 'high' && t.status !== 'done').length > 0 ? `
                         <option value="pending">Pending</option>
                         <option value="in-progress">In Progress</option>
                         <option value="done">Done</option>
+                        {form.isProject && <option value="stopped">Stopped</option>}
                       </select>
                     </label>
                   </div>

@@ -165,7 +165,7 @@ Generated on: ${new Date().toLocaleString()}
                         View Details
                       </button>
                       <button
-                        className="task-action-btn edit-btn"
+                        className="icon-btn-top export-btn"
                         onClick={() => handleEditTask(task)}
                       >
                         <FiEdit2 /> Edit
