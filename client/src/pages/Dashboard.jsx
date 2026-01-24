@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../api.js";
 import { useAuth } from "../context/AuthContext.jsx";
-import { useTheme } from "../context/ThemeContext.jsx";
 import Sidebar from "../components/Sidebar.jsx";
 import {
   FiSearch,
@@ -22,9 +21,7 @@ import {
   FiGift,
   FiActivity,
   FiChevronRight,
-  FiX,
-  FiSun,
-  FiMoon
+  FiX
 } from "react-icons/fi";
 
 const statusOptions = [
@@ -41,7 +38,6 @@ const priorityOptions = [
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -95,6 +91,186 @@ export default function Dashboard() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [taskMenuOpen, widgetMenuOpen, showNotifications]);
+
+  // Calculate real weekly progress analytics
+  const weeklyProgress = useMemo(() => {
+    const now = new Date();
+    const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const weekData = [];
+    
+    // Get data for the last 7 days
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dayStart = new Date(date.setHours(0, 0, 0, 0));
+      const dayEnd = new Date(date.setHours(23, 59, 59, 999));
+      
+      // Calculate tasks completed on this day
+      const completedTasks = tasks.filter(task => {
+        if (task.status !== 'done') return false;
+        if (!task.updatedAt) return false;
+        const taskDate = new Date(task.updatedAt);
+        return taskDate >= dayStart && taskDate <= dayEnd;
+      });
+      
+      // Calculate tasks created on this day
+      const createdTasks = tasks.filter(task => {
+        if (!task.createdAt) return false;
+        const taskDate = new Date(task.createdAt);
+        return taskDate >= dayStart && taskDate <= dayEnd;
+      });
+      
+      // Calculate high priority tasks completed
+      const highPriorityCompleted = completedTasks.filter(task => task.priority === 'high').length;
+      
+      weekData.push({
+        day: weekDays[date.getDay() === 0 ? 6 : date.getDay() - 1], // Adjust for Monday start
+        date: date.toLocaleDateString(),
+        completed: completedTasks.length,
+        created: createdTasks.length,
+        highPriority: highPriorityCompleted,
+        totalActive: tasks.filter(task => {
+          const taskDate = new Date(task.createdAt);
+          return taskDate <= dayEnd && task.status !== 'done';
+        }).length
+      });
+    }
+    
+    // Calculate trends
+    const totalCompleted = weekData.reduce((sum, day) => sum + day.completed, 0);
+    const totalCreated = weekData.reduce((sum, day) => sum + day.created, 0);
+    const totalHighPriority = weekData.reduce((sum, day) => sum + day.highPriority, 0);
+    
+    // Calculate completion rate trend
+    const completionTrend = weekData.map((day, index) => {
+      if (index === 0) return 0;
+      const prevCompleted = weekData.slice(0, index).reduce((sum, d) => sum + d.completed, 0);
+      const currentCompleted = weekData.slice(0, index + 1).reduce((sum, d) => sum + d.completed, 0);
+      return prevCompleted > 0 ? ((currentCompleted - prevCompleted) / prevCompleted) * 100 : 0;
+    });
+    
+    // Find the day with most completions
+    const bestDay = weekData.reduce((best, day) => 
+      day.completed > best.completed ? day : best, weekData[0]);
+    
+    return {
+      weekData,
+      totalCompleted,
+      totalCreated,
+      totalHighPriority,
+      completionTrend,
+      bestDay,
+      averagePerDay: (totalCompleted / 7).toFixed(1),
+      productivityScore: Math.min(100, Math.round((totalCompleted / Math.max(1, totalCreated)) * 100))
+    };
+  }, [tasks]);
+
+  // Calculate real monthly progress analytics
+  const monthlyProgress = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    const monthData = [];
+    
+    // Get data for each day of the current month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(currentYear, currentMonth, day);
+      const dayStart = new Date(date.setHours(0, 0, 0, 0));
+      const dayEnd = new Date(date.setHours(23, 59, 59, 999));
+      
+      // Calculate tasks completed on this day
+      const completedTasks = tasks.filter(task => {
+        if (task.status !== 'done') return false;
+        if (!task.updatedAt) return false;
+        const taskDate = new Date(task.updatedAt);
+        return taskDate >= dayStart && taskDate <= dayEnd;
+      });
+      
+      // Calculate tasks created on this day
+      const createdTasks = tasks.filter(task => {
+        if (!task.createdAt) return false;
+        const taskDate = new Date(task.createdAt);
+        return taskDate >= dayStart && taskDate <= dayEnd;
+      });
+      
+      // Calculate high priority tasks completed
+      const highPriorityCompleted = completedTasks.filter(task => task.priority === 'high').length;
+      
+      // Calculate in-progress tasks for this day
+      const inProgressTasks = tasks.filter(task => {
+        if (task.status !== 'in-progress') return false;
+        if (!task.createdAt) return false;
+        const taskDate = new Date(task.createdAt);
+        return taskDate <= dayEnd;
+      });
+      
+      monthData.push({
+        day: day,
+        date: date.toLocaleDateString(),
+        completed: completedTasks.length,
+        created: createdTasks.length,
+        highPriority: highPriorityCompleted,
+        inProgress: inProgressTasks.length,
+        totalActive: tasks.filter(task => {
+          const taskDate = new Date(task.createdAt);
+          return taskDate <= dayEnd && task.status !== 'done';
+        }).length
+      });
+    }
+    
+    // Calculate monthly totals and trends
+    const totalCompleted = monthData.reduce((sum, day) => sum + day.completed, 0);
+    const totalCreated = monthData.reduce((sum, day) => sum + day.created, 0);
+    const totalHighPriority = monthData.reduce((sum, day) => sum + day.highPriority, 0);
+    const totalInProgress = monthData.reduce((sum, day) => sum + day.inProgress, 0);
+    
+    // Calculate weekly averages
+    const weeks = Math.ceil(daysInMonth / 7);
+    const weeklyAverages = [];
+    for (let week = 0; week < weeks; week++) {
+      const startDay = week * 7;
+      const endDay = Math.min((week + 1) * 7, daysInMonth);
+      const weekData = monthData.slice(startDay, endDay);
+      const weekCompleted = weekData.reduce((sum, day) => sum + day.completed, 0);
+      const weekCreated = weekData.reduce((sum, day) => sum + day.created, 0);
+      weeklyAverages.push({
+        week: week + 1,
+        completed: weekCompleted,
+        created: weekCreated
+      });
+    }
+    
+    // Find the best and worst days
+    const bestDay = monthData.reduce((best, day) => 
+      day.completed > best.completed ? day : best, { completed: 0, day: 1 });
+    const worstDay = monthData.reduce((worst, day) => 
+      (day.completed < worst.completed || worst.completed === 0) ? day : worst, { completed: 0, day: 1 });
+    
+    // Calculate productivity trends
+    const firstHalfCompleted = monthData.slice(0, Math.floor(daysInMonth / 2)).reduce((sum, day) => sum + day.completed, 0);
+    const secondHalfCompleted = monthData.slice(Math.floor(daysInMonth / 2)).reduce((sum, day) => sum + day.completed, 0);
+    const monthlyTrend = firstHalfCompleted > 0 ? ((secondHalfCompleted - firstHalfCompleted) / firstHalfCompleted) * 100 : 0;
+    
+    return {
+      monthName: monthNames[currentMonth],
+      year: currentYear,
+      monthData,
+      totalCompleted,
+      totalCreated,
+      totalHighPriority,
+      totalInProgress,
+      weeklyAverages,
+      bestDay,
+      worstDay,
+      averagePerDay: (totalCompleted / daysInMonth).toFixed(1),
+      productivityScore: Math.min(100, Math.round((totalCompleted / Math.max(1, totalCreated)) * 100)),
+      monthlyTrend: monthlyTrend.toFixed(1),
+      completionRate: totalCreated > 0 ? Math.round((totalCompleted / totalCreated) * 100) : 0
+    };
+  }, [tasks]);
 
   const stats = useMemo(() => {
     const total = tasks.length;
@@ -152,22 +328,178 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   };
 
-  const handleDownloadReport = () => {
-    const report = {
-      totalTasks: stats.total,
-      completed: stats.done,
-      inProgress: stats.inProgress,
-      pending: stats.pending,
-      completionRate: stats.completion,
-      date: new Date().toISOString()
-    };
-    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+  const handleDownloadWeeklyReport = () => {
+    const reportContent = `
+WEEKLY PROGRESS REPORT
+Generated: ${new Date().toLocaleDateString()}
+User: ${user?.name || 'Unknown'}
+
+SUMMARY:
+- Total Tasks Completed: ${weeklyProgress.totalCompleted}
+- Total Tasks Created: ${weeklyProgress.totalCreated}
+- Average Tasks per Day: ${weeklyProgress.averagePerDay}
+- Productivity Score: ${weeklyProgress.productivityScore}%
+- Best Day: ${weeklyProgress.bestDay.day} (${weeklyProgress.bestDay.completed} tasks)
+
+DAILY BREAKDOWN:
+==========================================
+${weeklyProgress.weekData.map(day => `
+${day.day} (${day.date}):
+  Created: ${day.created} tasks
+  Completed: ${day.completed} tasks
+  High Priority Completed: ${day.highPriority} tasks
+  Active Tasks: ${day.totalActive}
+`).join('\n')}
+
+TREND ANALYSIS:
+${weeklyProgress.completionTrend.length > 0 ? 
+  `Completion trend is ${weeklyProgress.completionTrend[weeklyProgress.completionTrend.length - 1] > 0 ? 'improving' : 'declining'}` : 
+  'Insufficient data for trend analysis'
+}
+`;
+    
+    const blob = new Blob([reportContent], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const a = document.createElement('a');
     a.href = url;
-    a.download = `task-report-${new Date().toISOString().split("T")[0]}.json`;
+    a.download = `weekly-progress-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadMonthlyReport = () => {
+    const reportContent = `
+MONTHLY PROGRESS REPORT - ${monthlyProgress.monthName} ${monthlyProgress.year}
+Generated: ${new Date().toLocaleDateString()}
+User: ${user?.name || 'Unknown'}
+
+SUMMARY:
+- Total Tasks Completed: ${monthlyProgress.totalCompleted}
+- Total Tasks Created: ${monthlyProgress.totalCreated}
+- Total High Priority Completed: ${monthlyProgress.totalHighPriority}
+- Total In Progress: ${monthlyProgress.totalInProgress}
+- Average Tasks per Day: ${monthlyProgress.averagePerDay}
+- Productivity Score: ${monthlyProgress.productivityScore}%
+- Completion Rate: ${monthlyProgress.completionRate}%
+- Monthly Trend: ${monthlyProgress.monthlyTrend > 0 ? '+' : ''}${monthlyProgress.monthlyTrend}%
+
+PERFORMANCE HIGHLIGHTS:
+- Best Day: ${monthlyProgress.bestDay.day} (${monthlyProgress.bestDay.completed} tasks completed)
+- Worst Day: ${monthlyProgress.worstDay.day} (${monthlyProgress.worstDay.completed} tasks completed)
+
+WEEKLY BREAKDOWN:
+${monthlyProgress.weeklyAverages.map(week => 
+  `Week ${week.week}: ${week.completed} completed, ${week.created} created`
+).join('\n')}
+
+MONTHLY TREND:
+${monthlyProgress.monthlyTrend > 0 ? 
+  `Productivity improved by ${monthlyProgress.monthlyTrend}% in the second half of the month` : 
+  monthlyProgress.monthlyTrend < 0 ?
+  `Productivity declined by ${Math.abs(monthlyProgress.monthlyTrend)}% in the second half of the month` :
+  'Productivity remained stable throughout the month'
+}
+
+RECOMMENDATIONS:
+${monthlyProgress.productivityScore > 80 ? 
+  'Excellent productivity! Keep up the great work!' :
+  monthlyProgress.productivityScore > 60 ?
+  'Good productivity with room for improvement.' :
+  'Consider reviewing task management strategies to improve productivity.'
+}
+    `;
+    
+    const blob = new Blob([reportContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `monthly-progress-${monthlyProgress.monthName}-${monthlyProgress.year}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadReport = () => {
+    const reportContent = `
+TASK MANAGEMENT REPORT
+Generated: ${new Date().toLocaleDateString()}
+User: ${user?.name || 'Unknown'}
+
+TASK SUMMARY
+==========================================
+Total Tasks: ${stats.total}
+Completed Tasks: ${stats.done}
+In Progress: ${stats.inProgress}
+Pending Tasks: ${stats.pending}
+Completion Rate: ${stats.completion}%
+
+TASK BREAKDOWN BY STATUS
+==========================================
+Completed: ${stats.done} (${stats.total ? Math.round((stats.done / stats.total) * 100) : 0}%)
+In Progress: ${stats.inProgress} (${stats.total ? Math.round((stats.inProgress / stats.total) * 100) : 0}%)
+Pending: ${stats.pending} (${stats.total ? Math.round((stats.pending / stats.total) * 100) : 0}%)
+
+TASK BREAKDOWN BY PRIORITY
+==========================================
+High Priority: ${tasks.filter(t => t.priority === 'high').length}
+Medium Priority: ${tasks.filter(t => t.priority === 'medium').length}
+Low Priority: ${tasks.filter(t => t.priority === 'low').length}
+
+WEEKLY PERFORMANCE
+==========================================
+Weekly Completed: ${weeklyProgress.totalCompleted}
+Weekly Created: ${weeklyProgress.totalCreated}
+Productivity Score: ${weeklyProgress.productivityScore}%
+
+RECOMMENDATIONS
+==========================================
+${stats.completion >= 70 ? '• Great job maintaining high completion rate!' : '• Focus on completing pending tasks to improve completion rate'}
+${weeklyProgress.productivityScore >= 80 ? '• Excellent weekly productivity!' : '• Consider optimizing your workflow for better productivity'}
+${tasks.filter(t => t.priority === 'high' && t.status !== 'done').length > 0 ? `• ${tasks.filter(t => t.priority === 'high' && t.status !== 'done').length} high-priority tasks need attention` : '• All high-priority tasks are completed!'}
+    `.trim();
+
+    const blob = new Blob([reportContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `task-report-${new Date().toISOString().split('T')[0]}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleViewFullChart = () => {
+    // Navigate to statistics page for full analytics
+    window.location.href = '/statistics';
+  };
+
+  const [showTaskTypeModal, setShowTaskTypeModal] = useState(false);
+
+  const handleAddTaskClick = () => {
+    setShowTaskTypeModal(true);
+  };
+
+  const handleTaskTypeSelect = (type) => {
+    setShowTaskTypeModal(false);
+    if (type === 'task') {
+      setShowCreateForm(true);
+    } else if (type === 'project') {
+      // Handle project creation
+      setForm({
+        ...form,
+        title: '',
+        description: '',
+        status: 'in-progress',
+        dueDate: '',
+        priority: 'high',
+        isProject: true
+      });
+      setShowCreateForm(true);
+    }
   };
 
   const handleAddGoal = () => {
@@ -230,10 +562,28 @@ export default function Dashboard() {
             <button
               type="button"
               className="btn-create"
-              onClick={() => setShowCreateForm(true)}
+              onClick={handleAddTaskClick}
             >
               <FiPlus />
               Create
+            </button>
+            <button 
+              type="button" 
+              className="icon-btn-top export-btn" 
+              aria-label="View Full Chart"
+              onClick={handleViewFullChart}
+              title="View Full Analytics Chart"
+            >
+              <FiBarChart2 />
+            </button>
+            <button 
+              type="button" 
+              className="icon-btn-top export-btn" 
+              aria-label="Export Data"
+              onClick={handleDownloadReport}
+              title="Export Task Report"
+            >
+              <FiDownload />
             </button>
             <button 
               type="button" 
@@ -250,19 +600,6 @@ export default function Dashboard() {
               }}
             >
               <FiSearch />
-            </button>
-            <button 
-              type="button" 
-              className="icon-btn-top" 
-              aria-label="Toggle theme"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                toggleTheme();
-              }}
-              title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-            >
-              {theme === "light" ? <FiMoon /> : <FiSun />}
             </button>
             <button 
               type="button" 
@@ -411,7 +748,7 @@ export default function Dashboard() {
             {/* Weekly Progress */}
             <div className="widget weekly-progress-widget">
               <div className="widget-header">
-                <h2>Weekly progress</h2>
+                <h2>Weekly Progress</h2>
                 <div className="widget-menu-wrapper">
                   <button 
                     className="icon-btn-small"
@@ -442,7 +779,7 @@ export default function Dashboard() {
                           e.preventDefault();
                           e.stopPropagation();
                           setWidgetMenuOpen(null);
-                          console.log("View chart");
+                          console.log("View full analytics chart");
                         }}
                       >
                         <FiBarChart2 /> View Full Chart
@@ -453,55 +790,134 @@ export default function Dashboard() {
                           e.preventDefault();
                           e.stopPropagation();
                           setWidgetMenuOpen(null);
-                          handleDownloadReport();
+                          handleDownloadWeeklyReport();
                         }}
                       >
-                        <FiDownload /> Export
+                        <FiDownload /> Export Week
                       </button>
                     </div>
                   )}
                 </div>
               </div>
               <div className="widget-body">
-                <div className="progress-legend">
-                  <div className="legend-item">
-                    <span className="legend-dot sport-dot"></span>
-                    <span>Sport</span>
+                <div className="weekly-summary">
+                  <div className="summary-item">
+                    <span className="summary-label">Completed</span>
+                    <span className="summary-value">{weeklyProgress.totalCompleted}</span>
                   </div>
-                  <div className="legend-item">
-                    <span className="legend-dot study-dot"></span>
-                    <span>Study</span>
+                  <div className="summary-item">
+                    <span className="summary-label">Created</span>
+                    <span className="summary-value">{weeklyProgress.totalCreated}</span>
+                  </div>
+                  <div className="summary-item">
+                    <span className="summary-label">Avg/Day</span>
+                    <span className="summary-value">{weeklyProgress.averagePerDay}</span>
                   </div>
                 </div>
+                
+                <div className="progress-legend">
+                  <div className="legend-item">
+                    <span className="legend-dot completed-dot"></span>
+                    <span>Completed</span>
+                  </div>
+                  <div className="legend-item">
+                    <span className="legend-dot created-dot"></span>
+                    <span>Created</span>
+                  </div>
+                  <div className="legend-item">
+                    <span className="legend-dot high-priority-dot"></span>
+                    <span>High Priority</span>
+                  </div>
+                </div>
+                
                 <div className="progress-chart">
-                  <div className="chart-line sport-line">
-                    <div className="chart-point" style={{ left: "14%", top: "60%" }}></div>
-                    <div className="chart-point" style={{ left: "28%", top: "50%" }}></div>
-                    <div className="chart-point" style={{ left: "42%", top: "40%" }}></div>
-                    <div className="chart-point" style={{ left: "56%", top: "35%" }}></div>
-                    <div className="chart-point" style={{ left: "70%", top: "30%" }}></div>
-                    <div className="chart-point highlight" style={{ left: "84%", top: "20%" }}>
-                      <span className="chart-badge">+24%</span>
-                    </div>
-                    <div className="chart-point" style={{ left: "98%", top: "25%" }}></div>
+                  {/* Completed tasks line */}
+                  <div className="chart-line completed-line">
+                    {weeklyProgress.weekData.map((day, index) => {
+                      const maxValue = Math.max(...weeklyProgress.weekData.map(d => Math.max(d.completed, d.created)));
+                      const topPosition = maxValue > 0 ? (100 - (day.completed / maxValue) * 80) : 90;
+                      const isToday = index === weeklyProgress.weekData.length - 1;
+                      const isBestDay = day.day === weeklyProgress.bestDay.day;
+                      
+                      return (
+                        <div 
+                          key={`completed-${index}`}
+                          className={`chart-point ${isToday ? 'highlight' : ''} ${isBestDay ? 'best-day' : ''}`} 
+                          style={{ 
+                            left: `${14 + (index * 14)}%`, 
+                            top: `${topPosition}%` 
+                          }}
+                          title={`${day.day}: ${day.completed} completed`}
+                        >
+                          {isToday && day.completed > 0 && (
+                            <span className="chart-badge">+{day.completed}</span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="chart-line study-line">
-                    <div className="chart-point" style={{ left: "14%", top: "80%" }}></div>
-                    <div className="chart-point" style={{ left: "28%", top: "75%" }}></div>
-                    <div className="chart-point" style={{ left: "42%", top: "70%" }}></div>
-                    <div className="chart-point" style={{ left: "56%", top: "65%" }}></div>
-                    <div className="chart-point" style={{ left: "70%", top: "60%" }}></div>
-                    <div className="chart-point" style={{ left: "84%", top: "55%" }}></div>
-                    <div className="chart-point" style={{ left: "98%", top: "50%" }}></div>
+                  
+                  {/* Created tasks line */}
+                  <div className="chart-line created-line">
+                    {weeklyProgress.weekData.map((day, index) => {
+                      const maxValue = Math.max(...weeklyProgress.weekData.map(d => Math.max(d.completed, d.created)));
+                      const topPosition = maxValue > 0 ? (100 - (day.created / maxValue) * 80) : 90;
+                      
+                      return (
+                        <div 
+                          key={`created-${index}`}
+                          className="chart-point" 
+                          style={{ 
+                            left: `${14 + (index * 14)}%`, 
+                            top: `${topPosition}%` 
+                          }}
+                          title={`${day.day}: ${day.created} created`}
+                        />
+                      );
+                    })}
                   </div>
+                  
+                  {/* High priority tasks line */}
+                  <div className="chart-line high-priority-line">
+                    {weeklyProgress.weekData.map((day, index) => {
+                      const maxValue = Math.max(...weeklyProgress.weekData.map(d => Math.max(d.completed, d.created)));
+                      const topPosition = maxValue > 0 ? (100 - (day.highPriority / maxValue) * 80) : 90;
+                      
+                      return (
+                        <div 
+                          key={`priority-${index}`}
+                          className="chart-point priority-point" 
+                          style={{ 
+                            left: `${14 + (index * 14)}%`, 
+                            top: `${topPosition}%` 
+                          }}
+                          title={`${day.day}: ${day.highPriority} high priority completed`}
+                        />
+                      );
+                    })}
+                  </div>
+                  
                   <div className="chart-labels">
-                    <span>M</span>
-                    <span>T</span>
-                    <span>W</span>
-                    <span>T</span>
-                    <span>F</span>
-                    <span>S</span>
-                    <span>S</span>
+                    {weeklyProgress.weekData.map((day, index) => (
+                      <span key={index}>{day.day.charAt(0)}</span>
+                    ))}
+                  </div>
+                </div>
+                
+                <div className="weekly-insights">
+                  <div className="insight-item">
+                    <FiActivity className="insight-icon" />
+                    <div>
+                      <span className="insight-label">Best Day</span>
+                      <span className="insight-value">{weeklyProgress.bestDay.day} ({weeklyProgress.bestDay.completed} tasks)</span>
+                    </div>
+                  </div>
+                  <div className="insight-item">
+                    <FiCheckCircle className="insight-icon" />
+                    <div>
+                      <span className="insight-label">Productivity Score</span>
+                      <span className="insight-value">{weeklyProgress.productivityScore}%</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -510,7 +926,7 @@ export default function Dashboard() {
             {/* Month Progress */}
             <div className="widget month-progress-widget">
               <div className="widget-header">
-                <h2>Month progress</h2>
+                <h2>Monthly Progress - {monthlyProgress.monthName} {monthlyProgress.year}</h2>
                 <div className="widget-menu-wrapper">
                   <button 
                     className="icon-btn-small"
@@ -530,10 +946,10 @@ export default function Dashboard() {
                           e.preventDefault();
                           e.stopPropagation();
                           setWidgetMenuOpen(null);
-                          handleDownloadReport();
+                          handleDownloadMonthlyReport();
                         }}
                       >
-                        <FiDownload /> Download Report
+                        <FiDownload /> Export Month
                       </button>
                       <button 
                         type="button"
@@ -541,10 +957,10 @@ export default function Dashboard() {
                           e.preventDefault();
                           e.stopPropagation();
                           setWidgetMenuOpen(null);
-                          console.log("View statistics");
+                          console.log("View full monthly analytics chart");
                         }}
                       >
-                        <FiBarChart2 /> View Statistics
+                        <FiBarChart2 /> View Full Chart
                       </button>
                       <button 
                         type="button"
@@ -562,7 +978,9 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="widget-body">
-                <div className="month-progress-subtitle">+20% compared to last month</div>
+                <div className="month-progress-subtitle">
+                  {monthlyProgress.monthlyTrend > 0 ? '+' : ''}{monthlyProgress.monthlyTrend}% compared to first half of month
+                </div>
                 <div className="month-progress-circle-large">
                   <div className="progress-ring">
                     <svg width="120" height="120" viewBox="0 0 120 120">
@@ -581,37 +999,44 @@ export default function Dashboard() {
                         fill="none"
                         stroke="rgba(255,255,255,0.8)"
                         strokeWidth="8"
-                        strokeDasharray={`${120 * Math.PI * 0.8} ${120 * Math.PI}`}
+                        strokeDasharray={`${120 * Math.PI * (monthlyProgress.productivityScore / 100)} ${120 * Math.PI}`}
                         strokeDashoffset="0"
                         transform="rotate(-90 60 60)"
                       />
                     </svg>
                   </div>
                   <div className="progress-center">
-                    <span className="progress-percent">120%</span>
+                    <span className="progress-percent">{monthlyProgress.productivityScore}%</span>
+                  </div>
+                </div>
+                <div className="monthly-summary-mini">
+                  <div className="mini-summary-item">
+                    <span className="mini-label">Completed</span>
+                    <span className="mini-value">{monthlyProgress.totalCompleted}</span>
+                  </div>
+                  <div className="mini-summary-item">
+                    <span className="mini-label">Created</span>
+                    <span className="mini-value">{monthlyProgress.totalCreated}</span>
+                  </div>
+                  <div className="mini-summary-item">
+                    <span className="mini-label">Avg/Day</span>
+                    <span className="mini-value">{monthlyProgress.averagePerDay}</span>
                   </div>
                 </div>
                 <div className="month-progress-legend">
                   <div className="legend-item">
-                    <span className="legend-dot sport-dot"></span>
-                    <span>Sport</span>
+                    <span className="legend-dot completed-dot"></span>
+                    <span>Completed ({monthlyProgress.totalCompleted})</span>
                   </div>
                   <div className="legend-item">
-                    <span className="legend-dot study-dot"></span>
-                    <span>Study</span>
+                    <span className="legend-dot created-dot"></span>
+                    <span>Created ({monthlyProgress.totalCreated})</span>
                   </div>
                   <div className="legend-item">
-                    <span className="legend-dot project-dot"></span>
-                    <span>Project</span>
+                    <span className="legend-dot high-priority-dot"></span>
+                    <span>High Priority ({monthlyProgress.totalHighPriority})</span>
                   </div>
                 </div>
-                <button 
-                  className="btn-download"
-                  onClick={handleDownloadReport}
-                >
-                  <FiDownload />
-                  Download Report
-                </button>
               </div>
             </div>
 
@@ -690,14 +1115,14 @@ export default function Dashboard() {
                 <h2>Task In process ({inProgressTasks.length})</h2>
                 <button
                   type="button"
-                  className="archive-link"
+                  className="small"
                   onClick={() => {
                     const completedTasks = tasks.filter(t => t.status === "done");
                     console.log("Archive:", completedTasks);
                     alert(`You have ${completedTasks.length} completed tasks in archive`);
                   }}
                 >
-                  Open archive <FiChevronRight />
+                  View Archive <FiChevronRight />
                 </button>
               </div>
               <div className="widget-body">
@@ -771,12 +1196,58 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Task Type Selection Modal */}
+        {showTaskTypeModal && (
+          <div className="modal-overlay" onClick={() => setShowTaskTypeModal(false)}>
+            <div className="modal-content task-type-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>What would you like to create?</h2>
+                <button
+                  className="icon-btn-small"
+                  onClick={() => setShowTaskTypeModal(false)}
+                  aria-label="Close"
+                >
+                  <FiX />
+                </button>
+              </div>
+              <div className="modal-body">
+                <div className="task-type-options">
+                  <button
+                    className="task-type-option"
+                    onClick={() => handleTaskTypeSelect('task')}
+                  >
+                    <div className="task-type-icon">
+                      <FiCheckSquare />
+                    </div>
+                    <div className="task-type-content">
+                      <h3>Task</h3>
+                      <p>Create a single task with specific details and deadlines</p>
+                    </div>
+                  </button>
+                  <button
+                    className="task-type-option"
+                    onClick={() => handleTaskTypeSelect('project')}
+                  >
+                    <div className="task-type-icon project">
+                      <FiFileText />
+                    </div>
+                    <div className="task-type-content">
+                      <h3>Project</h3>
+                      <p>Create a larger project with multiple phases and high priority</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Create Task Modal */}
         {showCreateForm && (
           <div className="modal-overlay" onClick={() => setShowCreateForm(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>Create New Task</h2>
+                <h2>Create New {form.isProject ? 'Project' : 'Task'}</h2>
                 <button
                   className="icon-btn-small"
                   onClick={() => setShowCreateForm(false)}
@@ -785,66 +1256,73 @@ export default function Dashboard() {
                   <FiX />
                 </button>
               </div>
-              <form className="modal-form" onSubmit={handleAdd}>
-                <label>
-                  Title
-                  <input
-                    name="title"
-                    value={form.title}
-                    onChange={handleChange}
-                    required
-                    placeholder="What do you want to accomplish?"
-                  />
-                </label>
-                <label>
-                  Description
-                  <textarea
-                    name="description"
-                    value={form.description}
-                    onChange={handleChange}
-                    rows={3}
-                    placeholder="Add context, links, or notes"
-                  />
-                </label>
-                <div className="form-row">
+              <form onSubmit={handleSubmit} className="modal-form">
+                <div className="form-group">
                   <label>
-                    Status
-                    <select name="status" value={form.status} onChange={handleChange}>
-                      {statusOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Priority
-                    <select
-                      name="priority"
-                      value={form.priority}
-                      onChange={handleChange}
-                    >
-                      {priorityOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
+                    {form.isProject ? 'Project' : 'Task'} Title
+                    <input
+                      type="text"
+                      value={form.title}
+                      onChange={(e) => setForm({ ...form, title: e.target.value })}
+                      placeholder={`Enter ${form.isProject ? 'project' : 'task'} title`}
+                      required
+                    />
                   </label>
                 </div>
-                <label>
-                  Due date
-                  <input
-                    type="date"
-                    name="dueDate"
-                    value={form.dueDate}
-                    onChange={handleChange}
-                  />
-                </label>
+                <div className="form-group">
+                  <label>
+                    Description
+                    <textarea
+                      value={form.description}
+                      onChange={(e) => setForm({ ...form, description: e.target.value })}
+                      placeholder={`Describe your ${form.isProject ? 'project' : 'task'}...`}
+                      rows={4}
+                    />
+                  </label>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>
+                      Status
+                      <select
+                        value={form.status}
+                        onChange={(e) => setForm({ ...form, status: e.target.value })}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="done">Done</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="form-group">
+                    <label>
+                      Priority
+                      <select
+                        value={form.priority}
+                        onChange={(e) => setForm({ ...form, priority: e.target.value })}
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label>
+                    Due Date
+                    <input
+                      type="date"
+                      value={form.dueDate}
+                      onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
+                    />
+                  </label>
+                </div>
                 {error && <div className="error-message">{error}</div>}
                 <div className="modal-actions">
                   <button type="submit" className="btn primary">
-                    Create Task
+                    <FiPlus />
+                    Create {form.isProject ? 'Project' : 'Task'}
                   </button>
                   <button
                     type="button"

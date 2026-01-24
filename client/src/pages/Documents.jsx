@@ -9,7 +9,12 @@ import {
   FiTrash2, 
   FiEdit2,
   FiSave,
-  FiMove
+  FiMove,
+  FiPlus,
+  FiMaximize2,
+  FiRotateCw,
+  FiZoomIn,
+  FiZoomOut
 } from "react-icons/fi";
 
 export default function Documents() {
@@ -20,11 +25,16 @@ export default function Documents() {
   });
   const [showAddModal, setShowAddModal] = useState(false);
   const [addType, setAddType] = useState("image");
-  const [editingItem, setEditingItem] = useState(null);
   const [newText, setNewText] = useState("");
+  const [newImageUrl, setNewImageUrl] = useState("");
+  const [editingItem, setEditingItem] = useState(null);
+  const [editText, setEditText] = useState("");
   const [editFontSize, setEditFontSize] = useState(24);
   const [editColor, setEditColor] = useState("#090F15");
   const [draggedItem, setDraggedItem] = useState(null);
+  const [resizingItem, setResizingItem] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [editMode, setEditMode] = useState(false);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -32,6 +42,20 @@ export default function Documents() {
       localStorage.setItem(`moodboard_${user?.id}`, JSON.stringify(items));
     }
   }, [items, user?.id]);
+
+  const handleItemClick = (item) => {
+    setSelectedItem(item);
+  };
+
+  const handleWheelResize = (e, item) => {
+    e.preventDefault();
+    const scaleFactor = e.deltaY < 0 ? 1.1 : 0.9;
+    setItems(items.map(i => 
+      i.id === item.id 
+        ? { ...i, width: Math.max(50, i.width * scaleFactor), height: Math.max(50, i.height * scaleFactor) }
+        : i
+    ));
+  };
 
   const handleAddImage = (e) => {
     const file = e.target.files[0];
@@ -78,13 +102,59 @@ export default function Documents() {
     }
   };
 
+  const handleAddItem = () => {
+    if (addType === "text" && newText.trim()) {
+      handleAddText();
+    } else if (addType === "image" && newImageUrl.trim()) {
+      const newItem = {
+        id: Date.now(),
+        type: "image",
+        url: newImageUrl,
+        x: Math.random() * 300,
+        y: Math.random() * 200,
+        width: 200,
+        height: 200,
+        rotation: 0,
+        zIndex: items.length
+      };
+      setItems([...items, newItem]);
+      setNewImageUrl("");
+      setShowAddModal(false);
+    }
+  };
+
+  const handleEditItem = (item) => {
+    setEditingItem(item);
+    if (item.type === 'text') {
+      setEditText(item.content);
+      setEditFontSize(item.fontSize || 24);
+      setEditColor(item.color || '#090F15');
+    }
+  };
+
+  const handleSaveEdit = () => {
+    if (editingItem.type === 'text') {
+      setItems(items.map(item =>
+        item.id === editingItem.id
+          ? { ...item, content: editText, fontSize: editFontSize, color: editColor }
+          : item
+      ));
+    }
+    setEditingItem(null);
+    setEditText("");
+  };
+
   const handleDelete = (id) => {
     setItems(items.filter(item => item.id !== id));
+    if (selectedItem?.id === id) {
+      setSelectedItem(null);
+    }
   };
 
   const handleStartDrag = (e, item) => {
     e.preventDefault();
     setDraggedItem({ ...item, offsetX: e.clientX - item.x, offsetY: e.clientY - item.y });
+    setSelectedItem(item);
   };
 
   const handleDrag = (e) => {
@@ -117,10 +187,10 @@ export default function Documents() {
       let newWidth = startWidth;
       let newHeight = startHeight;
 
-      if (direction.includes('right')) newWidth = Math.max(100, startWidth + deltaX);
-      if (direction.includes('left')) newWidth = Math.max(100, startWidth - deltaX);
-      if (direction.includes('bottom')) newHeight = Math.max(100, startHeight + deltaY);
-      if (direction.includes('top')) newHeight = Math.max(100, startHeight - deltaY);
+      if (direction.includes('right')) newWidth = Math.max(50, startWidth + deltaX);
+      if (direction.includes('left')) newWidth = Math.max(50, startWidth - deltaX);
+      if (direction.includes('bottom')) newHeight = Math.max(50, startHeight + deltaY);
+      if (direction.includes('top')) newHeight = Math.max(50, startHeight - deltaY);
 
       setItems(items.map(i => 
         i.id === item.id ? { ...i, width: newWidth, height: newHeight } : i
@@ -143,7 +213,7 @@ export default function Documents() {
     const centerX = item.x + item.width / 2;
     const centerY = item.y + item.height / 2;
     const startAngle = Math.atan2(startY - centerY, startX - centerX) * 180 / Math.PI;
-    const startRotation = item.rotation;
+    const startRotation = item.rotation || 0;
 
     const handleMouseMove = (moveEvent) => {
       const currentAngle = Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX) * 180 / Math.PI;
@@ -160,6 +230,33 @@ export default function Documents() {
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleZoom = (item, direction) => {
+    const scaleFactor = direction === 'in' ? 1.1 : 0.9;
+    setItems(items.map(i => 
+      i.id === item.id 
+        ? { ...i, width: Math.max(50, i.width * scaleFactor), height: Math.max(50, i.height * scaleFactor) }
+        : i
+    ));
+  };
+
+  const handleBringToFront = (item) => {
+    const maxZ = Math.max(...items.map(i => i.zIndex || 0));
+    setItems(items.map(i => 
+      i.id === item.id ? { ...i, zIndex: maxZ + 1 } : i
+    ));
+  };
+
+  const handleDuplicate = (item) => {
+    const newItem = {
+      ...item,
+      id: Date.now(),
+      x: item.x + 20,
+      y: item.y + 20,
+      zIndex: Math.max(...items.map(i => i.zIndex || 0)) + 1
+    };
+    setItems([...items, newItem]);
   };
 
   useEffect(() => {
@@ -184,6 +281,89 @@ export default function Documents() {
             <h1 className="top-greeting">Moodboard</h1>
           </div>
           <div className="top-bar-right">
+            {selectedItem && (
+              <div className="selected-item-controls" style={{
+                display: 'flex', 
+                gap: '12px', 
+                marginRight: '20px',
+                padding: '8px 16px',
+                background: 'rgba(255, 255, 255, 0.1)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: '16px',
+                alignItems: 'center'
+              }}>
+                <span style={{
+                  color: '#ffffff',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  marginRight: '8px',
+                  opacity: 0.8
+                }}>
+                  Selected Item
+                </span>
+                <button
+                  className="moodboard-top-btn"
+                  onClick={() => handleEditItem(selectedItem)}
+                  title="Edit"
+                >
+                  <FiEdit2 />
+                </button>
+                <button
+                  className="moodboard-top-btn"
+                  onClick={() => handleZoom(selectedItem, 'in')}
+                  title="Zoom In"
+                >
+                  <FiZoomIn />
+                </button>
+                <button
+                  className="moodboard-top-btn"
+                  onClick={() => handleZoom(selectedItem, 'out')}
+                  title="Zoom Out"
+                >
+                  <FiZoomOut />
+                </button>
+                <button
+                  className="moodboard-top-btn"
+                  onClick={(e) => handleRotate(e, selectedItem)}
+                  title="Rotate"
+                >
+                  <FiRotateCw />
+                </button>
+                <button
+                  className="moodboard-top-btn"
+                  onClick={() => handleDuplicate(selectedItem)}
+                  title="Duplicate"
+                >
+                  <FiPlus />
+                </button>
+                <button
+                  className="moodboard-top-btn"
+                  onClick={() => handleBringToFront(selectedItem)}
+                  title="Bring to Front"
+                >
+                  <FiMaximize2 />
+                </button>
+                <button
+                  className="moodboard-top-btn delete-btn"
+                  onClick={() => {
+                    handleDelete(selectedItem.id);
+                    setSelectedItem(null);
+                  }}
+                  title="Delete"
+                >
+                  <FiTrash2 />
+                </button>
+                <button
+                  className="moodboard-top-btn close-btn"
+                  onClick={() => setSelectedItem(null)}
+                  title="Deselect"
+                >
+                  <FiX />
+                </button>
+              </div>
+            )}
             <button 
               className="btn-create"
               onClick={() => setShowAddModal(true)}
@@ -219,60 +399,42 @@ export default function Documents() {
               {items.map((item) => (
                 <div
                   key={item.id}
-                  className="moodboard-item"
+                  className={`moodboard-item ${selectedItem?.id === item.id ? 'selected' : ''}`}
                   style={{
                     left: `${item.x}px`,
                     top: `${item.y}px`,
                     width: `${item.width}px`,
                     height: `${item.height}px`,
-                    transform: `rotate(${item.rotation}deg)`,
-                    zIndex: item.zIndex
+                    transform: `rotate(${item.rotation || 0}deg)`,
+                    zIndex: item.zIndex || 0
                   }}
                   onMouseDown={(e) => handleStartDrag(e, item)}
+                  onClick={() => handleItemClick(item)}
+                  onWheel={(e) => selectedItem?.id === item.id ? handleWheelResize(e, item) : undefined}
                 >
                   {item.type === 'image' ? (
-                    <img src={item.content} alt="Moodboard" className="moodboard-image" />
+                    <img src={item.url || item.content} alt="Moodboard" className="moodboard-image" 
+                         style={{width: '100%', height: '100%', objectFit: 'contain', display: 'block'}} />
                   ) : (
                     <div 
                       className="moodboard-text"
                       style={{
                         fontSize: `${item.fontSize}px`,
                         color: item.color,
-                        fontFamily: item.fontFamily
+                        fontFamily: item.fontFamily || 'Inter',
+                        padding: '10px',
+                        wordWrap: 'break-word',
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxSizing: 'border-box'
                       }}
                     >
                       {item.content}
                     </div>
                   )}
-                  
-                  <div className="moodboard-item-controls">
-                    <button
-                      className="moodboard-control-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingItem(item);
-                        if (item.type === 'text') {
-                          setNewText(item.content);
-                          setEditFontSize(item.fontSize || 24);
-                          setEditColor(item.color || '#090F15');
-                        }
-                      }}
-                      title="Edit"
-                    >
-                      <FiEdit2 />
-                    </button>
-                    <button
-                      className="moodboard-control-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(item.id);
-                      }}
-                      title="Delete"
-                    >
-                      <FiTrash2 />
-                    </button>
-                  </div>
-
                   <div className="moodboard-resize-handles">
                     <div 
                       className="resize-handle resize-top-left"
@@ -290,14 +452,33 @@ export default function Documents() {
                       className="resize-handle resize-bottom-right"
                       onMouseDown={(e) => handleResize(e, item, 'bottom-right')}
                     />
+                    <div 
+                      className="resize-handle resize-top"
+                      onMouseDown={(e) => handleResize(e, item, 'top')}
+                    />
+                    <div 
+                      className="resize-handle resize-bottom"
+                      onMouseDown={(e) => handleResize(e, item, 'bottom')}
+                    />
+                    <div 
+                      className="resize-handle resize-left"
+                      onMouseDown={(e) => handleResize(e, item, 'left')}
+                    />
+                    <div 
+                      className="resize-handle resize-right"
+                      onMouseDown={(e) => handleResize(e, item, 'right')}
+                    />
                   </div>
-
-                  <div 
-                    className="moodboard-rotate-handle"
-                    onMouseDown={(e) => handleRotate(e, item)}
-                  >
-                    <FiMove />
-                  </div>
+                  
+                  {/* Edge resize zones - larger areas for easier resizing */}
+                  <div className="resize-zone resize-top-zone" onMouseDown={(e) => handleResize(e, item, 'top')} />
+                  <div className="resize-zone resize-bottom-zone" onMouseDown={(e) => handleResize(e, item, 'bottom')} />
+                  <div className="resize-zone resize-left-zone" onMouseDown={(e) => handleResize(e, item, 'left')} />
+                  <div className="resize-zone resize-right-zone" onMouseDown={(e) => handleResize(e, item, 'right')} />
+                  <div className="resize-zone resize-top-left-zone" onMouseDown={(e) => handleResize(e, item, 'top-left')} />
+                  <div className="resize-zone resize-top-right-zone" onMouseDown={(e) => handleResize(e, item, 'top-right')} />
+                  <div className="resize-zone resize-bottom-left-zone" onMouseDown={(e) => handleResize(e, item, 'bottom-left')} />
+                  <div className="resize-zone resize-bottom-right-zone" onMouseDown={(e) => handleResize(e, item, 'bottom-right')} />
                 </div>
               ))}
             </div>
@@ -452,15 +633,7 @@ export default function Documents() {
                     <div className="modal-actions">
                       <button
                         className="btn primary"
-                        onClick={() => {
-                          setItems(items.map(item =>
-                            item.id === editingItem.id
-                              ? { ...item, content: newText, fontSize: editFontSize, color: editColor }
-                              : item
-                          ));
-                          setEditingItem(null);
-                          setNewText("");
-                        }}
+                        onClick={handleSaveEdit}
                       >
                         <FiSave />
                         Save Changes

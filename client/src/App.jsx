@@ -8,11 +8,12 @@ import MyTasks from "./pages/MyTasks.jsx";
 import Statistics from "./pages/Statistics.jsx";
 import Documents from "./pages/Documents.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
+import bgImage from "./bg.jpg";
 
 export default function App() {
   return (
     <>
-      <div className="app-background"></div>
+      <div className="app-background" style={{ backgroundImage: `url(${bgImage})` }}></div>
       <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
