@@ -415,6 +415,103 @@
   }
 }
 
+/* Auth pages mobile responsive */
+@media (max-width: 480px) {
+  .page {
+    min-height: 100vh;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+  }
+
+  .auth-card {
+    max-width: 100%;
+    width: 100%;
+    margin: 0 auto;
+    padding: 24px 16px;
+  }
+
+  .auth-card h1 {
+    font-size: 1.75rem !important;
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    font-size: 14px !important;
+    margin-bottom: 24px;
+  }
+
+  form {
+    gap: 16px;
+  }
+
+  label {
+    gap: 8px;
+    font-size: 13px !important;
+  }
+
+  input,
+  textarea {
+    padding: 12px 12px !important;
+    font-size: 16px !important; /* Prevent zoom on iOS */
+    border-radius: 8px !important;
+  }
+
+  button {
+    width: 100%;
+    padding: 12px 16px !important;
+    font-size: 15px !important;
+    border-radius: 8px !important;
+  }
+
+  button:active {
+    transform: translateY(2px) scale(0.98);
+  }
+
+  .helper {
+    font-size: 13px !important;
+    margin-top: 16px;
+  }
+
+  .error {
+    font-size: 13px !important;
+    padding: 10px 12px !important;
+  }
+
+  input:focus,
+  textarea:focus {
+    transform: translateY(0);
+  }
+}
+
+/* Tablet responsive */
+@media (min-width: 481px) and (max-width: 768px) {
+  .page {
+    padding: 24px 16px;
+  }
+
+  .auth-card {
+    max-width: 450px;
+    margin: 32px auto;
+  }
+
+  form {
+    gap: 16px;
+  }
+
+  input,
+  textarea {
+    padding: 12px 14px;
+    font-size: 15px;
+  }
+
+  button {
+    width: 100%;
+    padding: 12px 18px;
+    font-size: 15px;
+  }
+}
+
 /* Print styles */
 @media print {
   .sidebar,

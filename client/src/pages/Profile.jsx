@@ -29,13 +29,14 @@ export default function Profile() {
       .get("/auth/me")
       .then((res) => {
         if (!mounted) return;
+        const userData = res.data.data.user;
         setProfile({
-          name: res.data.name,
-          email: res.data.email,
-          profilePicture: res.data.profilePicture
+          name: userData.name,
+          email: userData.email,
+          profilePicture: userData.profilePicture
         });
-        setForm((prev) => ({ ...prev, name: res.data.name }));
-        updateUser(res.data);
+        setForm((prev) => ({ ...prev, name: userData.name }));
+        updateUser(userData);
       })
       .catch(() => {
         // ignore for now, user object is already available
@@ -66,9 +67,10 @@ export default function Profile() {
     reader.onloadend = async () => {
       try {
         const base64String = reader.result;
-        const res = await api.put("/auth/me", { profilePicture: base64String });
-        setProfile((prev) => ({ ...prev, profilePicture: res.data.profilePicture }));
-        updateUser(res.data);
+        const res = await api.put("/auth/profile", { profilePicture: base64String });
+        const updatedUser = res.data.data.user;
+        setProfile((prev) => ({ ...prev, profilePicture: updatedUser.profilePicture }));
+        updateUser(updatedUser);
         setStatus("Profile picture updated successfully!");
         setTimeout(() => setStatus(""), 3000);
       } catch (err) {
@@ -89,9 +91,10 @@ export default function Profile() {
   const removeImage = async () => {
     setUploading(true);
     try {
-      const res = await api.put("/auth/me", { profilePicture: null });
+      const res = await api.put("/auth/profile", { profilePicture: null });
+      const updatedUser = res.data.data.user;
       setProfile((prev) => ({ ...prev, profilePicture: null }));
-      updateUser(res.data);
+      updateUser(updatedUser);
       setStatus("Profile picture removed successfully!");
       setTimeout(() => setStatus(""), 3000);
     } catch (err) {
@@ -108,24 +111,30 @@ export default function Profile() {
     setStatus("");
     setLoading(true);
     try {
-      const payload = {
-        name: form.name,
-        currentPassword: form.currentPassword || undefined,
-        newPassword: form.newPassword || undefined
-      };
-      const res = await api.put("/auth/me", payload);
-      setProfile((prev) => ({ ...prev, name: res.data.name, email: res.data.email }));
-      updateUser(res.data);
+      // 1. Update Profile (Name)
+      const res = await api.put("/auth/profile", { name: form.name });
+      const updatedUser = res.data.data.user;
+      
+      // 2. Update Password if provided
+      if (form.currentPassword && form.newPassword) {
+        await api.put("/auth/password", {
+          currentPassword: form.currentPassword,
+          newPassword: form.newPassword
+        });
+      }
+
+      setProfile((prev) => ({ ...prev, name: updatedUser.name, email: updatedUser.email }));
+      updateUser(updatedUser);
       setStatus("Profile updated successfully!");
       setForm((prev) => ({ ...prev, currentPassword: "", newPassword: "" }));
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to update profile");
+      setError(err.response?.data?.error || err.response?.data?.message || "Failed to update profile");
     } finally {
       setLoading(false);
       setTimeout(() => {
         setStatus("");
         setError("");
-      }, 3000);
+      }, 4000);
     }
   };
 
@@ -133,14 +142,14 @@ export default function Profile() {
     <div className="app-layout">
       <Sidebar />
       <div className="main-content">
-        <header className="top-header">
-          <div className="header-left">
-            <h1 className="greeting">Profile Settings</h1>
+        <header className="top-bar">
+          <div className="top-bar-left">
+            <h1 className="top-greeting">Profile Settings</h1>
           </div>
-          <div className="header-right">
+          <div className="top-bar-right">
             <button
               type="button"
-              className="icon-btn"
+              className="icon-btn-top"
               onClick={() => navigate("/")}
               aria-label="Back to dashboard"
             >
@@ -149,7 +158,7 @@ export default function Profile() {
           </div>
         </header>
 
-        <div className="dashboard-content">
+        <div className="dashboard-content-glass lift-in">
           <div className="widget profile-widget">
             <div className="widget-header">
               <h2>Profile Information</h2>

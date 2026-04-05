@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { 
   FiLayout, 
@@ -7,11 +7,11 @@ import {
   FiBarChart2,
   FiFileText,
   FiSettings,
+  FiLogOut,
   FiMenu,
   FiX,
-  FiPlus
 } from "react-icons/fi";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const mainNavItems = [
   { path: "/", label: "Dashboard", icon: FiLayout },
@@ -23,24 +23,50 @@ const mainNavItems = [
 
 export default function Sidebar() {
   const location = useLocation();
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+    setIsMobileOpen(false);
+  };
+
+  // Close sidebar when route changes on mobile
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [location.pathname]);
+
+  // Close sidebar when clicking outside on mobile
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (isMobileOpen && !e.target.closest('.sidebar') && !e.target.closest('.mobile-menu-toggle')) {
+        setIsMobileOpen(false);
+      }
+    };
+
+    if (isMobileOpen) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [isMobileOpen]);
 
   return (
     <>
+      {isMobileOpen && <div className="sidebar-overlay show" onClick={() => setIsMobileOpen(false)} />}
       <button 
-        className={`mobile-menu-toggle ${isMobileOpen ? 'sidebar-open' : ''}`}
+        className="mobile-menu-toggle"
         onClick={() => setIsMobileOpen(!isMobileOpen)}
         aria-label="Toggle menu"
+        type="button"
       >
         {isMobileOpen ? <FiX /> : <FiMenu />}
       </button>
       <aside className={`sidebar ${isMobileOpen ? "open" : ""}`}>
         <div className="sidebar-header">
-          <Link to="/" className="logo" onClick={() => setIsMobileOpen(false)}>
-            <div className="logo-icon-wrapper">
-              
-            </div>
+          <Link to="/" className="logo">
+            <div className="logo-icon-wrapper" />
             <span className="logo-text">Prolista</span>
           </Link>
         </div>
@@ -55,9 +81,8 @@ export default function Sidebar() {
                   key={item.label}
                   to={item.path}
                   className={`nav-item ${isActive ? "active" : ""}`}
-                  onClick={() => setIsMobileOpen(false)}
                 >
-                  <Icon className="nav-icon" />
+                  <Icon className="nav-icon" aria-hidden="true" />
                   <span className="nav-label">{item.label}</span>
                 </Link>
               );
@@ -66,22 +91,20 @@ export default function Sidebar() {
         </nav>
 
         <div className="sidebar-footer">
-          <Link
-            to="/profile"
-            className="nav-item nav-item-settings"
-            onClick={() => setIsMobileOpen(false)}
-          >
-            <FiSettings className="nav-icon" />
+          <Link to="/profile" className="nav-item nav-item-settings">
+            <FiSettings className="nav-icon" aria-hidden="true" />
             <span className="nav-label">Settings</span>
           </Link>
+          <button
+            onClick={handleLogout}
+            className="nav-item nav-item-logout"
+            type="button"
+          >
+            <FiLogOut className="nav-icon" aria-hidden="true" />
+            <span className="nav-label">Logout</span>
+          </button>
         </div>
       </aside>
-      {isMobileOpen && (
-        <div 
-          className="sidebar-overlay"
-          onClick={() => setIsMobileOpen(false)}
-        />
-      )}
     </>
   );
 }

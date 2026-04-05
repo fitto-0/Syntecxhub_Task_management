@@ -1,20 +1,10 @@
-import axios from "axios";
+/* ============================================
+   API MODULE - Re-exports from services/api.js
+   DO NOT USE - Import from services/api.js directly
+   This file is kept for backwards compatibility
+   ============================================ */
 
-const instance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api"
-});
+import api, { authService, taskService, projectService, monthGoalService } from "./services/api.js";
 
-let authToken = null;
-
-instance.interceptors.request.use((config) => {
-  if (authToken) {
-    config.headers.Authorization = `Bearer ${authToken}`;
-  }
-  return config;
-});
-
-export function setToken(token) {
-  authToken = token;
-}
-
-export default Object.assign(instance, { setToken });
+export { authService, taskService, projectService, monthGoalService };
+export default api;

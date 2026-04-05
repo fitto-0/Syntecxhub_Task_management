@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import api from "../api.js";
+import { authService } from "../services/api.js";
 
 const AuthContext = createContext(null);
 
@@ -15,36 +15,35 @@ export function AuthProvider({ children }) {
     }
     const storedUser = localStorage.getItem("user");
     if (storedUser) setUser(JSON.parse(storedUser));
-    api.setToken(token);
     setLoading(false);
   }, [token]);
 
   const login = async (email, password) => {
-    const res = await api.post("/auth/login", { email, password });
-    persistAuth(res.data);
-    return res.data;
+    // authService.login expects a credentials object { email, password }
+    const authData = await authService.login({ email, password });
+    persistAuth(authData);
+    return authData;
   };
 
   const register = async (payload) => {
-    const res = await api.post("/auth/register", payload);
-    persistAuth(res.data);
-    return res.data;
+    const authData = await authService.register(payload);
+    persistAuth(authData);
+    return authData;
   };
 
   const logout = () => {
     setUser(null);
     setToken(null);
-    api.setToken(null);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
   };
 
-  const persistAuth = (data) => {
-    setUser(data.user);
-    setToken(data.token);
-    api.setToken(data.token);
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data.user));
+  const persistAuth = (authData) => {
+    // authData is the { token, user } object from res.data
+    setUser(authData.user);
+    setToken(authData.token);
+    localStorage.setItem("token", authData.token);
+    localStorage.setItem("user", JSON.stringify(authData.user));
   };
 
   const updateUser = (userData) => {

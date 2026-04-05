@@ -95,7 +95,7 @@ export default function Calendar() {
             <h1 className="top-greeting">Calendar</h1>
           </div>
           <div className="top-bar-right">
-            <button className="small" onClick={() => setShowEventForm(true)}>
+            <button className="btn-create" onClick={() => setShowEventForm(true)}>
               <FiPlus /> Add Event
             </button>
           </div>
@@ -106,13 +106,13 @@ export default function Calendar() {
             <div className="calendar-header">
               <h2>{currentMonth}</h2>
               <div className="calendar-nav">
-                <button className="ghost small" onClick={() => navigateMonth('prev')}>
+                <button className="btn-create" onClick={() => navigateMonth('prev')}>
                   Previous
                 </button>
-                <button className="ghost small" onClick={goToToday}>
+                <button className="btn-create" onClick={goToToday}>
                   Today
                 </button>
-                <button className="ghost small" onClick={() => navigateMonth('next')}>
+                <button className="btn-create" onClick={() => navigateMonth('next')}>
                   Next
                 </button>
               </div>

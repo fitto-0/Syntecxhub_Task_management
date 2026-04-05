@@ -380,14 +380,7 @@ export default function Documents() {
               <FiImage className="empty-page-icon" />
               <h2>Your moodboard is empty</h2>
               <p>Start adding images and text to create your inspiration board!</p>
-              <button 
-                className="btn primary" 
-                style={{ marginTop: "20px" }}
-                onClick={() => setShowAddModal(true)}
-              >
-                <FiUpload />
-                Add Your First Item
-              </button>
+              
             </div>
           ) : (
             <div 
