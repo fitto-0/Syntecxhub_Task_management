@@ -74,8 +74,10 @@ export default function Profile() {
         setStatus("Profile picture updated successfully!");
         setTimeout(() => setStatus(""), 3000);
       } catch (err) {
-        setError(err.response?.data?.message || "Failed to upload image");
-        setTimeout(() => setError(""), 3000);
+        console.error("Error uploading image:", err);
+        const errorMsg = err.response?.data?.error || err.response?.data?.message || "Failed to upload image";
+        setError(errorMsg);
+        setTimeout(() => setError(""), 5000);
       } finally {
         setUploading(false);
       }

@@ -12,6 +12,7 @@ import authRoutes from "./routes/auth.js";
 import taskRoutes from "./routes/tasks.js";
 import projectRoutes from "./routes/projects.js";
 import monthGoalRoutes from "./routes/monthGoals.js";
+import { generalLimiter, authLimiter } from "./middleware/rateLimiters.js";
 
 dotenv.config();
 
@@ -30,31 +31,7 @@ app.use(helmet({
   },
 }));
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: {
-    error: "Too many requests from this IP, please try again later."
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Auth-specific rate limiting (stricter)
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 auth requests per windowMs
-  message: {
-    error: "Too many authentication attempts, please try again later."
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-app.use(limiter);
-
-// CORS configuration
+// CORS configuration - MUST come before rate limiting to handle error response headers
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
     ? [process.env.FRONTEND_URL] 
@@ -65,9 +42,12 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// Rate limiting - Applied only after CORS is set up
+app.use(generalLimiter);
+
 // Body parsing middleware
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // Data sanitization
 app.use(mongoSanitize());
@@ -76,7 +56,8 @@ app.use(mongoSanitize());
 app.use((req, res, next) => {
   if (req.body) {
     Object.keys(req.body).forEach(key => {
-      if (typeof req.body[key] === 'string') {
+      // Skip XSS filtering for large image data to prevent corruption and performance issues
+      if (typeof req.body[key] === 'string' && key !== 'profilePicture') {
         req.body[key] = xss(req.body[key]);
       }
     });
@@ -97,8 +78,8 @@ app.get("/", (_req, res) => {
   });
 });
 
-// API routes with auth rate limiting
-app.use("/api/auth", authLimiter, authRoutes);
+// API routes
+app.use("/api/auth", authRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/projects", projectRoutes);
 app.use("/api/month-goals", monthGoalRoutes);

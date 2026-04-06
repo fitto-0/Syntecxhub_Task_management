@@ -8,7 +8,7 @@ import MyTasks from "./pages/MyTasks.jsx";
 import Statistics from "./pages/Statistics.jsx";
 import Documents from "./pages/Documents.jsx";
 import RequireAuth from "./components/RequireAuth.jsx";
-import bgImage from "./bg.jpg";
+import bgImage from "./image copy 4.png";
 
 export default function App() {
   return (
